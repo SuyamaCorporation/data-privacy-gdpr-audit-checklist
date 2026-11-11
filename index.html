@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>データプライバシーGDPR監査チェックリスト</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">データプライバシーGDPR監査チェックリスト</h1>
+    <p class="text-gray-500 text-sm">GDPR・個人情報保護法コンプライアンスチェックツール</p>
+  </div>
+
+  <!-- スコアバー -->
+  <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div>
+        <span class="text-3xl font-bold text-blue-600" id="score-pct">0%</span>
+        <span class="text-gray-500 ml-2 text-sm">達成率</span>
+        <span class="text-gray-400 text-sm ml-4" id="score-detail">0 / 0 完了</span>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="filterItems('all')" id="filter-all" aria-label="全件表示" class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border-2 border-blue-400">全件</button>
+        <button onclick="filterItems('high')" id="filter-high" aria-label="優先度高フィルター" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 border-2 border-transparent">優先: 高</button>
+        <button onclick="filterItems('medium')" id="filter-medium" aria-label="優先度中フィルター" class="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border-2 border-transparent">優先: 中</button>
+        <button onclick="filterItems('low')" id="filter-low" aria-label="優先度低フィルター" class="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border-2 border-transparent">優先: 低</button>
+        <button onclick="filterItems('pending')" id="filter-pending" aria-label="未対応フィルター" class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border-2 border-transparent">未対応</button>
+      </div>
+    </div>
+    <div class="w-full bg-gray-200 rounded-full h-4">
+      <div id="progress-bar" class="bg-blue-500 h-4 rounded-full transition-all duration-500" style="width:0%"></div>
+    </div>
+    <div class="flex gap-4 mt-3 text-xs flex-wrap">
+      <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-green-500"></span>完了 <span id="cnt-done" class="font-bold">0</span></span>
+      <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-red-400"></span>未対応 <span id="cnt-no" class="font-bold">0</span></span>
+      <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-gray-400"></span>N.A. <span id="cnt-na" class="font-bold">0</span></span>
+    </div>
+  </div>
+
+  <!-- チェックリスト -->
+  <div id="checklist-container"></div>
+
+  <!-- 未対応リスト -->
+  <div class="bg-white rounded-2xl shadow-lg p-6 mb-6" id="pending-section" style="display:none">
+    <h2 class="text-lg font-bold text-red-600 mb-3">未対応項目一覧</h2>
+    <ul id="pending-list" class="list-disc list-inside text-sm text-gray-700 space-y-1"></ul>
+  </div>
+
+  <!-- エクスポート -->
+  <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+    <button onclick="copyMarkdown()" aria-label="Markdown形式でクリップボードにコピー" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition">Markdown形式でクリップボードにコピー</button>
+    <p id="copy-msg" class="text-green-600 text-sm text-center mt-2 hidden">コピーしました！</p>
+  </div>
+
+  <p class="text-xs text-gray-400 text-center">※ このツールは参考用です。法的アドバイスを構成するものではありません。</p>
+</div>
+
+<script>
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+const CATEGORIES = [
+  {
+    id: 'consent',
+    name: '同意管理',
+    icon: '✅',
+    items: [
+      {id:'c1', text:'同意取得前に処理目的を明確に説明している', priority:'high'},
+      {id:'c2', text:'同意は自由かつ明確に与えられる仕組みになっている', priority:'high'},
+      {id:'c3', text:'同意の撤回手続きが容易に実施できる', priority:'high'},
+      {id:'c4', text:'未成年（16歳未満）の同意には親権者の確認を行っている', priority:'medium'},
+      {id:'c5', text:'同意記録（日時・内容・バージョン）を保管している', priority:'high'},
+      {id:'c6', text:'クッキー同意バナーがGDPRに準拠している', priority:'medium'},
+    ]
+  },
+  {
+    id: 'storage',
+    name: 'データ保存・削除',
+    icon: '🗄️',
+    items: [
+      {id:'s1', text:'個人データの保存期間ポリシーを定めている', priority:'high'},
+      {id:'s2', text:'保存期間経過後の自動削除または匿名化を実施している', priority:'high'},
+      {id:'s3', text:'削除要求（忘れられる権利）に対応できる仕組みがある', priority:'high'},
+      {id:'s4', text:'バックアップデータも保存期間ポリシーの対象に含まれている', priority:'medium'},
+      {id:'s5', text:'データの最小化原則（必要最小限の収集）を遵守している', priority:'medium'},
+      {id:'s6', text:'個人データの暗号化（保存時・転送時）を実施している', priority:'high'},
+    ]
+  },
+  {
+    id: 'third-party',
+    name: '第三者提供',
+    icon: '🤝',
+    items: [
+      {id:'t1', text:'第三者へのデータ提供に関する契約（DPA）を締結している', priority:'high'},
+      {id:'t2', text:'第三者提供先の一覧を把握・記録している', priority:'high'},
+      {id:'t3', text:'EU域外への個人データ移転に適切な保護措置を実施している', priority:'high'},
+      {id:'t4', text:'サブプロセッサーの利用に関する同意・記録がある', priority:'medium'},
+      {id:'t5', text:'第三者提供の事実をプライバシーポリシーに明記している', priority:'medium'},
+    ]
+  },
+  {
+    id: 'dpia',
+    name: 'DPIA（データ保護影響評価）',
+    icon: '🔍',
+    items: [
+      {id:'d1', text:'高リスク処理活動についてDPIAを実施している', priority:'high'},
+      {id:'d2', text:'DPIAの結果を記録・保存している', priority:'medium'},
+      {id:'d3', text:'プロファイリング・自動意思決定に対してDPIAを実施している', priority:'high'},
+      {id:'d4', text:'DPO（データ保護責任者）の選任が必要か判断している', priority:'medium'},
+      {id:'d5', text:'DPIAの見直しサイクルを定期的に実施している', priority:'low'},
+    ]
+  },
+  {
+    id: 'incident',
+    name: 'インシデント対応',
+    icon: '🚨',
+    items: [
+      {id:'i1', text:'個人データ侵害の検出・報告手順を整備している', priority:'high'},
+      {id:'i2', text:'72時間以内に監督機関へ通知できる体制がある（GDPR72時間ルール）', priority:'high'},
+      {id:'i3', text:'高リスク侵害の場合、当事者への通知手順を整備している', priority:'high'},
+      {id:'i4', text:'インシデント対応訓練を年1回以上実施している', priority:'medium'},
+      {id:'i5', text:'インシデントログを維持・保管している', priority:'medium'},
+    ]
+  },
+  {
+    id: 'records',
+    name: '記録管理',
+    icon: '📋',
+    items: [
+      {id:'r1', text:'処理活動記録（RoPA）を維持している', priority:'high'},
+      {id:'r2', text:'処理の法的根拠を処理活動ごとに記録している', priority:'high'},
+      {id:'r3', text:'データ主体の権利行使（アクセス・訂正・削除）への対応記録がある', priority:'high'},
+      {id:'r4', text:'従業員へのデータ保護トレーニングを実施・記録している', priority:'medium'},
+      {id:'r5', text:'プライバシーポリシーの改訂履歴を管理している', priority:'low'},
+      {id:'r6', text:'コントローラー・プロセッサー間の役割分担を文書化している', priority:'medium'},
+      {id:'r7', text:'データ保護方針（ポリシー）を年1回以上見直している', priority:'low'},
+    ]
+  }
+];
+
+const PRIORITY_LABEL = {high:'高', medium:'中', low:'低'};
+const PRIORITY_COLOR = {high:'text-red-600 bg-red-50', medium:'text-yellow-700 bg-yellow-50', low:'text-green-600 bg-green-50'};
+const STATUS_OPTIONS = [{v:'none',l:'未対応'},{v:'done',l:'完了'},{v:'na',l:'N.A.'}];
+
+let state = {};
+let currentFilter = 'all';
+
+function loadState(){
+  try { state = JSON.parse(localStorage.getItem('gdpr-audit-2026') || '{}'); } catch(e){ state={}; }
+}
+function saveState(){
+  localStorage.setItem('gdpr-audit-2026', JSON.stringify(state));
+}
+
+function getStatus(id){ return state[id] || 'none'; }
+
+function setStatus(id, val){
+  state[id] = val;
+  saveState();
+  updateScore();
+  updatePending();
+  renderItem(id);
+}
+
+function renderItem(id){
+  const el = document.getElementById('row-'+id);
+  if(!el) return;
+  const s = getStatus(id);
+  const btnDone = el.querySelector('[data-val="done"]');
+  const btnNo = el.querySelector('[data-val="none"]');
+  const btnNa = el.querySelector('[data-val="na"]');
+  [btnDone,btnNo,btnNa].forEach(b=>{
+    b.classList.remove('ring-2','ring-offset-1');
+    b.classList.remove('ring-green-400','ring-red-400','ring-gray-400');
+  });
+  if(s==='done'){ btnDone.classList.add('ring-2','ring-offset-1','ring-green-400'); el.classList.add('bg-green-50'); el.classList.remove('bg-red-50','bg-white'); }
+  else if(s==='na'){ btnNa.classList.add('ring-2','ring-offset-1','ring-gray-400'); el.classList.add('bg-gray-50'); el.classList.remove('bg-green-50','bg-red-50'); }
+  else { btnNo.classList.add('ring-2','ring-offset-1','ring-red-400'); el.classList.remove('bg-green-50','bg-gray-50'); el.classList.add('bg-white'); }
+}
+
+function updateScore(){
+  let total=0, done=0, no=0, na=0;
+  CATEGORIES.forEach(cat=>{
+    cat.items.forEach(item=>{
+      total++;
+      const s = getStatus(item.id);
+      if(s==='done') done++;
+      else if(s==='na') na++;
+      else no++;
+    });
+  });
+  const applicable = total - na;
+  const pct = applicable>0 ? Math.round(done/applicable*100) : 0;
+  document.getElementById('score-pct').textContent = pct+'%';
+  document.getElementById('score-detail').textContent = done+' / '+applicable+' 完了（N.A. '+na+'件除く）';
+  document.getElementById('progress-bar').style.width = pct+'%';
+  document.getElementById('cnt-done').textContent = done;
+  document.getElementById('cnt-no').textContent = no;
+  document.getElementById('cnt-na').textContent = na;
+  const color = pct>=80?'bg-green-500':pct>=50?'bg-yellow-500':'bg-red-500';
+  const bar = document.getElementById('progress-bar');
+  bar.className = bar.className.replace(/bg-\w+-\d+/,'') + ' '+color;
+}
+
+function updatePending(){
+  const list = document.getElementById('pending-list');
+  const sec = document.getElementById('pending-section');
+  list.innerHTML='';
+  let count=0;
+  CATEGORIES.forEach(cat=>{
+    cat.items.forEach(item=>{
+      if(getStatus(item.id)==='none'){
+        count++;
+        const li=document.createElement('li');
+        li.textContent='['+PRIORITY_LABEL[item.priority]+'] '+item.text;
+        list.appendChild(li);
+      }
+    });
+  });
+  sec.style.display = count>0?'block':'none';
+}
+
+function filterItems(f){
+  currentFilter=f;
+  ['all','high','medium','low','pending'].forEach(x=>{
+    const btn=document.getElementById('filter-'+x);
+    if(btn){ btn.classList.toggle('border-blue-400',x===f); btn.classList.toggle('border-transparent',x!==f); }
+  });
+  CATEGORIES.forEach(cat=>{
+    cat.items.forEach(item=>{
+      const row=document.getElementById('row-'+item.id);
+      if(!row) return;
+      let show=true;
+      if(f==='high') show=item.priority==='high';
+      else if(f==='medium') show=item.priority==='medium';
+      else if(f==='low') show=item.priority==='low';
+      else if(f==='pending') show=getStatus(item.id)==='none';
+      row.style.display=show?'':'none';
+    });
+  });
+}
+
+function buildUI(){
+  const container=document.getElementById('checklist-container');
+  container.innerHTML='';
+  CATEGORIES.forEach(cat=>{
+    const sec=document.createElement('div');
+    sec.className='bg-white rounded-2xl shadow-lg p-6 mb-4';
+    let html=`<h2 class="text-lg font-bold text-gray-800 mb-4">${escHtml(cat.icon)} ${escHtml(cat.name)}</h2>`;
+    html+='<div class="space-y-3">';
+    cat.items.forEach(item=>{
+      const pColor=PRIORITY_COLOR[item.priority]||'';
+      html+=`<div id="row-${escHtml(item.id)}" class="flex items-start gap-3 p-3 rounded-xl bg-white border border-gray-100 transition">
+        <div class="flex-1 min-w-0">
+          <span class="text-sm text-gray-800">${escHtml(item.text)}</span>
+          <span class="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${escHtml(pColor)}">優先: ${escHtml(PRIORITY_LABEL[item.priority])}</span>
+        </div>
+        <div class="flex gap-1 shrink-0">
+          <button data-val="done" onclick="setStatus('${escHtml(item.id)}','done')" aria-label="完了にする" class="px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 font-semibold hover:bg-green-200 transition">完了</button>
+          <button data-val="none" onclick="setStatus('${escHtml(item.id)}','none')" aria-label="未対応にする" class="px-2 py-1 text-xs rounded-lg bg-red-100 text-red-600 font-semibold hover:bg-red-200 transition">未対応</button>
+          <button data-val="na" onclick="setStatus('${escHtml(item.id)}','na')" aria-label="N.A.にする" class="px-2 py-1 text-xs rounded-lg bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition">N.A.</button>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+    sec.innerHTML=html;
+    container.appendChild(sec);
+  });
+  CATEGORIES.forEach(cat=>cat.items.forEach(item=>renderItem(item.id)));
+}
+
+function copyMarkdown(){
+  let md = '# GDPR監査チェックリスト 結果\n\n';
+  const now=new Date();
+  md+=`実施日: ${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}\n\n`;
+  let total=0,done=0,na=0;
+  CATEGORIES.forEach(cat=>{
+    md+=`## ${cat.icon} ${cat.name}\n\n`;
+    cat.items.forEach(item=>{
+      total++;
+      const s=getStatus(item.id);
+      const mark=s==='done'?'[x]':s==='na'?'[-]':'[ ]';
+      if(s==='done') done++;
+      if(s==='na') na++;
+      md+=`- ${mark} [優先:${PRIORITY_LABEL[item.priority]}] ${item.text}\n`;
+    });
+    md+='\n';
+  });
+  const applicable=total-na;
+  const pct=applicable>0?Math.round(done/applicable*100):0;
+  md+=`---\n## スコア: ${pct}% (${done}/${applicable}件完了・N.A. ${na}件)\n\n`;
+  md+='### 未対応項目\n\n';
+  CATEGORIES.forEach(cat=>{
+    cat.items.forEach(item=>{
+      if(getStatus(item.id)==='none') md+=`- [優先:${PRIORITY_LABEL[item.priority]}] ${item.text}\n`;
+    });
+  });
+  navigator.clipboard.writeText(md).then(()=>{
+    const msg=document.getElementById('copy-msg');
+    msg.classList.remove('hidden');
+    setTimeout(()=>msg.classList.add('hidden'),2500);
+  }).catch(()=>alert('コピーに失敗しました'));
+}
+
+loadState();
+buildUI();
+updateScore();
+updatePending();
+</script>
+</body>
+</html>
